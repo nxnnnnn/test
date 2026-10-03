@@ -1,0 +1,302 @@
+-- โหลด Orion Library
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+local Window = OrionLib:MakeWindow({
+    Name = "สคริปต์สเปเชียล (ภาษาไทย)",
+    HidePremium = true,
+    SaveConfig = false,
+    ConfigFolder = "DeltaScriptConfig"
+})
+
+-- ตัวแปรระบบ
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local SavedPositions = {}
+local InfiniteJumpEnabled = false
+local Flying = false
+local FlySpeed = 50
+local ESPEnabled = false
+
+--------------------------------------------------------------------
+-- 0. สร้างปุ่ม Icon ลอยสำหรับ เปิด/ปิด GUI
+--------------------------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+local ToggleButton = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Name = "DeltaToggleGui"
+ScreenGui.Parent = (gethui and gethui()) or game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
+
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Parent = ScreenGui
+ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ToggleButton.Position = UDim2.new(0, 10, 0.4, 0)
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Text = "เปิด/ปิด"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 14.00
+ToggleButton.Draggable = true
+
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = ToggleButton
+
+ToggleButton.MouseButton1Click:Connect(function()
+    local container = OrionLib.Container
+    if container then
+        container.Enabled = not container.Enabled
+    end
+end)
+
+--------------------------------------------------------------------
+-- แท็บที่ 1: สถานะตัวละคร
+--------------------------------------------------------------------
+local TabPlayer = Window:MakeTab({
+    Name = "ตัวละคร",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+TabPlayer:AddTextbox({
+    Name = "วิ่งเร็ว (Speed)",
+    Default = "16",
+    TextDisappear = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = num
+        end
+    end
+})
+
+TabPlayer:AddTextbox({
+    Name = "กระโดดสูง (Jump Power)",
+    Default = "50",
+    TextDisappear = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.UseJumpPower = true
+            LocalPlayer.Character.Humanoid.JumpPower = num
+        end
+    end
+})
+
+TabPlayer:AddToggle({
+    Name = "1. กระโดดไม่จำกัด (Infinite Jump)",
+    Default = false,
+    Callback = function(Value)
+        InfiniteJumpEnabled = Value
+    end
+})
+
+UserInputService.JumpRequest:Connect(function()
+    if InfiniteJumpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+TabPlayer:AddToggle({
+    Name = "2. ระบบบิน (Fly)",
+    Default = false,
+    Callback = function(Value)
+        Flying = Value
+        local char = LocalPlayer.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+        
+        local hrp = char.HumanoidRootPart
+        if Flying then
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "FlyVelocity"
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bv.Velocity = Vector3.zero
+            bv.Parent = hrp
+            
+            task.spawn(function()
+                while Flying and hrp:FindFirstChild("FlyVelocity") do
+                    local cam = workspace.CurrentCamera
+                    bv.Velocity = cam.CFrame.LookVector * FlySpeed
+                    task.wait()
+                end
+                if bv then bv:Destroy() end
+            end)
+        else
+            if hrp:FindFirstChild("FlyVelocity") then
+                hrp.FlyVelocity:Destroy()
+            end
+        end
+    end
+})
+
+TabPlayer:AddTextbox({
+    Name = "ความเร็วในการบิน",
+    Default = "50",
+    TextDisappear = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num then FlySpeed = num end
+    end
+})
+
+--------------------------------------------------------------------
+-- แท็บที่ 2: วาร์ป & ESP
+--------------------------------------------------------------------
+local TabTP = Window:MakeTab({
+    Name = "วาร์ป & ESP",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local playerDropdown
+local function getPlayerNames()
+    local names = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(names, p.Name)
+        end
+    end
+    return names
+end
+
+playerDropdown = TabTP:AddDropdown({
+    Name = "3. เลือกผู้เล่นที่ต้องการวาปหา",
+    Default = "",
+    Options = getPlayerNames(),
+    Callback = function(TargetName)
+        local targetPlayer = Players:FindFirstChild(TargetName)
+        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame
+            end
+        end
+    end
+})
+
+TabTP:AddButton({
+    Name = "รีเฟรชรายชื่อผู้เล่น",
+    Callback = function()
+        playerDropdown:Refresh(getPlayerNames(), true)
+    end
+})
+
+local ESPHighlights = {}
+TabTP:AddToggle({
+    Name = "4. แสดงตำแหน่งผู้เล่น (ESP)",
+    Default = false,
+    Callback = function(Value)
+        ESPEnabled = Value
+        if not ESPEnabled then
+            for _, hl in pairs(ESPHighlights) do
+                hl:Destroy()
+            end
+            ESPHighlights = {}
+        end
+    end
+})
+
+RunService.RenderStepped:Connect(function()
+    if ESPEnabled then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                if not ESPHighlights[p] or not ESPHighlights[p].Parent then
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "ESPHighlight"
+                    hl.FillColor = Color3.fromRGB(255, 0, 0)
+                    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    hl.FillTransparency = 0.5
+                    hl.Parent = p.Character
+                    ESPHighlights[p] = hl
+                end
+            end
+        end
+    end
+end)
+
+--------------------------------------------------------------------
+-- แท็บที่ 3: จุดเซฟ (Safe Point)
+--------------------------------------------------------------------
+local TabSafe = Window:MakeTab({
+    Name = "จุดเซฟ (Safe Point)",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local saveNameInput = ""
+local safeDropdown
+
+local function updateSafeDropdown()
+    local names = {}
+    for name, _ in pairs(SavedPositions) do
+        table.insert(names, name)
+    end
+    safeDropdown:Refresh(names, true)
+end
+
+TabSafe:AddTextbox({
+    Name = "ตั้งชื่อจุดที่จะเซฟ",
+    Default = "",
+    TextDisappear = false,
+    Callback = function(Value)
+        saveNameInput = Value
+    end
+})
+
+TabSafe:AddButton({
+    Name = "5. บันทึกจุดปัจจุบัน",
+    Callback = function()
+        if saveNameInput ~= "" and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            SavedPositions[saveNameInput] = LocalPlayer.Character.HumanoidRootPart.CFrame
+            OrionLib:MakeNotification({
+                Name = "สำเร็จ!",
+                Content = "บันทึกจุด '" .. saveNameInput .. "' เรียบร้อยแล้ว",
+                Time = 3
+            })
+            updateSafeDropdown()
+        else
+            OrionLib:MakeNotification({
+                Name = "แจ้งเตือน",
+                Content = "กรุณาพิมพ์ชื่อจุดก่อนกดบันทึก",
+                Time = 3
+            })
+        end
+    end
+})
+
+safeDropdown = TabSafe:AddDropdown({
+    Name = "5.1 เลือกจุดที่ต้องการวาปไป",
+    Default = "",
+    Options = {},
+    Callback = function(SelectedPoint)
+        if SavedPositions[SelectedPoint] and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = SavedPositions[SelectedPoint]
+        end
+    end
+})
+
+-- ปรับแก้ระบบจับคำสั่ง /swp ในช่องแชทให้รองรับระบบแชทใหม่
+pcall(function()
+    local TextChatService = game:GetService("TextChatService")
+    TextChatService.OnIncomingMessage = function(message)
+        if message.TextSource and message.TextSource.UserId == LocalPlayer.UserId then
+            local msg = message.Text
+            local args = string.split(msg, " ")
+            if args[1] == "/swp" then
+                local pointName = args[2] or ("Point_" .. tostring(#SavedPositions + 1))
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    SavedPositions[pointName] = LocalPlayer.Character.HumanoidRootPart.CFrame
+                    OrionLib:MakeNotification({
+                        Name = "เซฟจุดเรียบร้อย",
+                        Content = "บันทึกจุดชื่อ: " .. pointName,
+                        Time = 3
+                    })
+                    updateSafeDropdown()
+                end
+            end
+        end
+    end
+end)
+
+-- เริ่มต้น GUI
+OrionLib:Init()
